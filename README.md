@@ -10,7 +10,8 @@ panel, and hand your edits back to the agent.
   which the agent reads as your review.
 
 `alt-m` opens the panel yourself, with the Markdown files of the focused
-pane's folder. `md-review --no-wait <file>` only opens the file.
+pane's folder. Escape leaves the block you are editing, or closes the panel.
+`md-review --no-wait <file>` only opens the file.
 
 ## Install
 
@@ -20,15 +21,23 @@ git clone <this repo> ~/git/herdr-md-review
 ```
 
 It copies the mod into `~/.config/herdr-app/mods/`, links `md-review` into
-`~/.local/bin`, binds `alt-m`, and adds the agent rule to
-`~/.claude/CLAUDE.md` and `~/.config/opencode/AGENTS.md` (if those folders
-exist). Re-run it after `git pull`; it is safe to run twice. Needs `python3`.
+`~/.local/bin` and binds `alt-m`. It tells the agents about `md-review`:
+
+- Claude Code: a SessionStart hook in `~/.claude/settings.json` runs
+  `md-review --rule`, which prints the rule only inside herdr (herdr
+  terminals set `HC_TERMINAL_ID`). Outside herdr, Claude never hears of it.
+- opencode: the rule goes in `~/.config/opencode/AGENTS.md`, because its
+  commands may run in a server without herdr's environment. Outside herdr,
+  `md-review` exits with "not running inside herdr" and the agent asks in
+  chat instead.
+
+Re-run it after `git pull`; it is safe to run twice. Needs `python3`.
 
 ## Notes
 
 - `markdown-panel/` is the
   [herdr-kanso](https://github.com/jlopezlira/herdr-kanso) markdown panel by
   jlopezlira (Apache-2.0), without its macOS file handler, plus a Done
-  button in `main.js` (look for `done(cx)`).
+  button and an Escape binding in `main.js` (look for "local addition").
 - Closing the panel with × is not Done: the agent keeps waiting.
 - Files on SSH machines open read-only and have no Done button.

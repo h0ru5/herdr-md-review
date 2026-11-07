@@ -2,6 +2,13 @@
 # Open a Markdown file in herdr's markdown-panel window for review.
 # Waits until "Done" is clicked in the panel, then prints the reviewer's
 # changes as a diff (empty: no changes). --no-wait: open and return.
+# --rule: print the agent rule, only inside herdr (for a SessionStart hook).
+# herdr terminals set HC_TERMINAL_ID; outside herdr there is no panel to open.
+if [ "$1" = --rule ]; then
+  [ -n "$HC_TERMINAL_ID" ] && cat "$(dirname "$(readlink -f "$0")")/../rule.md"
+  exit 0
+fi
+[ -n "$HC_TERMINAL_ID" ] || { echo "md-review: not running inside herdr; ask for the review in chat instead" >&2; exit 2; }
 wait=1; [ "$1" = --no-wait ] && { wait=; shift; }
 [ -f "$1" ] || { echo "usage: md-review [--no-wait] <file.md>" >&2; exit 1; }
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}

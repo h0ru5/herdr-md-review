@@ -38,6 +38,9 @@ export default class MarkdownPanel extends View {
     const { on, folder } = placeOf(focused(), spaces(), home());
     this.on = on; this.folder = folder;
     this.handle = cx.focus_handle();
+    // Escape (local addition): leaves the block being edited, else closes the panel.
+    // A binding, not on_key_down, because a focused Textarea takes Escape first.
+    cx.bind_keys(["MarkdownPanel", "MarkdownPanel > Input"].map((context) => ({ keystroke: "escape", action: "markdown_panel_escape", context })));
     this.watchOpens(cx);
     this.list(cx);
   }
@@ -133,7 +136,10 @@ export default class MarkdownPanel extends View {
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx))
       .child(svg(`${ICONS}/${icon}.svg`).size(14));
-    return v_flex().id("markdown-panel").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
+    return v_flex().id("markdown-panel").key_context("MarkdownPanel").track_focus(this.handle)
+      .on_action("markdown_panel_escape", (_e, cx) => {
+        if (doc && doc.active !== null) { doc.close(); cx.notify(); } else this.close(cx);
+      }).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .on_key_down((e, cx) => doc?.key(e, cx))
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
         .when(Boolean(doc), (el) => el.child(button("md-back", "chevron-left", "Markdown in this folder", (cx) => this.back(cx))))
