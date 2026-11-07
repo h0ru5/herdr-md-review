@@ -1,0 +1,162 @@
+// Markdown panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+// markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; watchOpens picks them up.
+// doc.js and blocks.js are synced copies of kanso-panel's; edit those.
+import { View, div, svg } from "gpui-kit";
+import { v_flex, h_flex } from "gpui-base";
+import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
+import { MarkdownDoc, tildePath } from "./doc.js";
+
+const ICONS = "mods/markdown-panel/icons";
+const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
+const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
+const nameOf = (path) => path.split(/[\\/]/).at(-1);
+const REMOTE_READ_MS = 3000;
+
+// Reads and removes the paths waiting in the inbox; returns the newest.
+export async function takeOpens(dir) {
+  const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
+  const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
+  return paths.at(-1) ?? null;
+}
+
+export function markdownIn(listing) {
+  return listing.split("\n").map((l) => l.trim()).filter((l) => /\.(md|markdown|mdx)$/i.test(l))
+    .toSorted((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
+}
+
+// The focused pane's machine (null: this one) and folder. A pane on an SSH
+// machine has a folder on that machine, so its files are listed and read there.
+export function placeOf(focus, list, localHome) {
+  const space = list.find((s) => s.id === focus?.space);
+  const on = space?.machine ?? null;
+  return { on, folder: focus?.cwd || space?.folder || (on ? "" : localHome) };
+}
+
+export default class MarkdownPanel extends View {
+  init(_props, cx) {
+    this.doc = null; this.files = null;
+    const { on, folder } = placeOf(focused(), spaces(), home());
+    this.on = on; this.folder = folder;
+    this.handle = cx.focus_handle();
+    this.watchOpens(cx);
+    this.list(cx);
+  }
+
+  list(cx) {
+    const on = this.on;
+    cx.spawn(async (cx) => {
+      // A machine's home when its pane told no folder: where its commands start.
+      const folder = this.folder || (await exec("pwd", [], { on }).catch(() => null))?.stdout.trim() || "";
+      this.folder = folder;
+      const where = { cwd: folder || undefined, on };
+      const git = await exec("git", ["ls-files", "--", "*.md", "*.markdown", "*.mdx"], where).catch(() => null);
+      const out = git?.code === 0 && git.stdout.trim() ? git.stdout
+        : (await exec("find", [".", "-maxdepth", "3", "-name", "node_modules", "-prune", "-o", "-type", "f", "(", "-iname", "*.md", "-o", "-iname", "*.mdx", ")", "-print"], where).catch(() => null))?.stdout ?? "";
+      this.files = markdownIn(out.replace(/^\.\//gm, ""));
+      cx.notify();
+    });
+  }
+
+  watchOpens(cx) {
+    const dir = `${appHome()}/data/kanso-open`;
+    cx.spawn(async (cx) => {
+      try {
+        await exec("mkdir", ["-p", dir]);
+        for (;;) {
+          const path = await takeOpens(dir);
+          if (path && isMarkdown(path)) this.open(path, cx);
+          await watchFolder(dir);
+        }
+      } catch { /* no inbox: nothing opens from outside */ }
+    });
+  }
+
+  // Saves what you typed in the file shown before, then shows this one.
+  // on: the machine the file is on (null: this one); paths opened from outside are here.
+  open(path, cx, on = null) {
+    const before = this.doc;
+    cx.spawn(async (cx) => {
+      if (before && !(await before.flush())) { cx.notify(); return; }
+      before?.release();
+      this.doc = new MarkdownDoc(path, on, (to) => { if (isMarkdown(to)) this.open(to, cx, on); }, ICONS);
+      this.doc.load(cx);
+      this.watch(path, cx);
+      cx.notify();
+    });
+  }
+
+  // Another machine's folder can't be watched from here: read it every few seconds.
+  watch(path, cx) {
+    const doc = this.doc, dir = folderOf(path);
+    const next = () => (doc.on ? cx.sleep(REMOTE_READ_MS) : watchFolder(dir));
+    cx.spawn(async (cx) => {
+      try { while (this.doc === doc) { await next(); if (this.doc === doc) doc.load(cx); } } catch {}
+    });
+  }
+
+  close(cx) {
+    const doc = this.doc, id = props()?.overlay;
+    const done = () => { if (id) closeOverlay(id); };
+    if (!doc) { done(); return; }
+    cx.spawn(async (cx) => {
+      if (!(await doc.flush())) { cx.notify(); return; }
+      doc.release(); this.doc = null;
+      done();
+    });
+  }
+
+  // Done (local addition): saves, tells `md-review` the review is finished, closes.
+  done(cx) {
+    const doc = this.doc;
+    if (!doc) return;
+    cx.spawn(async (cx) => {
+      if (!(await doc.flush())) { cx.notify(); return; }
+      const dir = `${appHome()}/data/review-done`;
+      await exec("sh", ["-c", 'mkdir -p "$1" && printf %s "$2" > "$1/$(date +%s)-$$.path"', "sh", dir, doc.path]);
+      this.close(cx);
+    });
+  }
+
+  back(cx) {
+    const doc = this.doc;
+    if (!doc) return;
+    cx.spawn(async (cx) => {
+      if (!(await doc.flush())) { cx.notify(); return; }
+      doc.release(); this.doc = null;
+      cx.notify();
+    });
+  }
+
+  render() {
+    const t = theme();
+    const doc = this.doc;
+    const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
+      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx))
+      .child(svg(`${ICONS}/${icon}.svg`).size(14));
+    return v_flex().id("markdown-panel").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
+      .on_key_down((e, cx) => doc?.key(e, cx))
+      .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
+        .when(Boolean(doc), (el) => el.child(button("md-back", "chevron-left", "Markdown in this folder", (cx) => this.back(cx))))
+        .child(v_flex().flex_1().min_w(0).pl(doc ? 0 : 4)
+          .child(div().truncate().font_semibold().child(doc ? nameOf(doc.path) : "Markdown"))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(doc ? folderOf(doc.path) : this.folder, doc ? doc.on : this.on))))
+        .children(doc ? doc.controls(t, "md") : [])
+        .when(Boolean(doc) && !doc.editing, (el) => el.child(button("md-refresh", "refresh", "Read again", (cx) => doc.load(cx))))
+        .when(Boolean(doc) && !doc.on, (el) => el.child(div().id("md-done").px(8).py(3).rounded(6).cursor_pointer().text_size(12)
+          .bg(t.raised).border_1().border_color(t.border).tooltip("Review done: tell the agent").hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => this.done(cx)).child("Done")))
+        .child(button("md-close", "close", "Close", (cx) => this.close(cx))))
+      .child(doc ? doc.body(t, "md-doc") : this.listView(t));
+  }
+
+  listView(t) {
+    const files = this.files;
+    if (files === null) return div().p(16).text_size(12.5).text_color(t.dim).child("Looking for Markdown…");
+    if (!files.length) return div().p(16).text_size(12.5).text_color(t.dim).child("No Markdown files in this folder. Cmd-click a .md path in a terminal to read it here.");
+    return div().id("md-files").flex_1().min_h(0).overflow_y_scrollbar().p(6)
+      .children(files.map((f, i) => h_flex().id(`md-file-${i}`).flex_none().h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
+        .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(`${this.folder}/${f}`, cx, this.on))
+        .child(div().flex_none().truncate().child(nameOf(f)))
+        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(f.includes("/") ? folderOf(f) : ""))));
+  }
+}

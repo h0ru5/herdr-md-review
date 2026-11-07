@@ -1,0 +1,27 @@
+#!/bin/sh
+# Open a Markdown file in herdr's markdown-panel window for review.
+# Waits until "Done" is clicked in the panel, then prints the reviewer's
+# changes as a diff (empty: no changes). --no-wait: open and return.
+wait=1; [ "$1" = --no-wait ] && { wait=; shift; }
+[ -f "$1" ] || { echo "usage: md-review [--no-wait] <file.md>" >&2; exit 1; }
+home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
+p=$(realpath "$1")
+done_dir=$home/data/review-done
+mkdir -p "$home/data/kanso-open" "$done_dir"
+snap=$(mktemp); cp "$p" "$snap"
+printf '%s' "$p" > "$home/data/kanso-open/$(date +%s)-$$.path"
+case "$(herdr-app status 2>/dev/null)" in
+  *'"markdown-panel"'*) ;;
+  *) herdr-app do mod.open '{"name":"markdown-panel"}' >/dev/null ;;
+esac
+[ -n "$wait" ] || { rm -f "$snap"; exit 0; }
+# ponytail: 1 s poll; inotifywait if latency ever matters
+while :; do
+  for f in "$done_dir"/*.path; do
+    [ -f "$f" ] && [ "$(cat "$f")" = "$p" ] && { rm -f "$f"; break 2; }
+  done
+  sleep 1
+done
+echo "Review done: $p"
+diff -u --label before --label after "$snap" "$p" || true
+rm -f "$snap"
