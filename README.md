@@ -9,7 +9,9 @@ panel, and hand your edits back to the agent.
 - You click **Done**. `md-review` exits and prints your changes as a diff,
   which the agent reads as your review.
 
-`alt-m` opens the panel yourself, with the Markdown files of the focused
+`alt-m` opens the panel yourself. It lists, first, the Markdown files the
+focused terminal is talking about: a copied path, paths shown on its screen,
+and the scratchpad of a Claude Code session in it. Then the files in the
 pane's folder. Escape leaves the block you are editing, or closes the panel.
 `md-review --no-wait <file>` only opens the file.
 
@@ -38,6 +40,6 @@ Re-run it after `git pull`; it is safe to run twice. Needs `python3`.
 - `markdown-panel/` is the
   [herdr-kanso](https://github.com/jlopezlira/herdr-kanso) markdown panel by
   jlopezlira (Apache-2.0), without its macOS file handler, plus a Done
-  button and an Escape binding in `main.js` (look for "local addition").
+  button, an Escape binding and the "From this terminal" list (`recent.sh`) (look for "local addition").
 - Closing the panel with × is not Done: the agent keeps waiting.
 - Files on SSH machines open read-only and have no Done button.

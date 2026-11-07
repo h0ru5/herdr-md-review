@@ -41,8 +41,10 @@ export default class MarkdownPanel extends View {
     // Escape (local addition): leaves the block being edited, else closes the panel.
     // A binding, not on_key_down, because a focused Textarea takes Escape first.
     cx.bind_keys(["MarkdownPanel", "MarkdownPanel > Input"].map((context) => ({ keystroke: "escape", action: "markdown_panel_escape", context })));
+    this.recent = [];
     this.watchOpens(cx);
     this.list(cx);
+    this.findRecent(focused()?.terminal, cx);
   }
 
   list(cx) {
@@ -56,6 +58,17 @@ export default class MarkdownPanel extends View {
       const out = git?.code === 0 && git.stdout.trim() ? git.stdout
         : (await exec("find", [".", "-maxdepth", "3", "-name", "node_modules", "-prune", "-o", "-type", "f", "(", "-iname", "*.md", "-o", "-iname", "*.mdx", ")", "-print"], where).catch(() => null))?.stdout ?? "";
       this.files = markdownIn(out.replace(/^\.\//gm, ""));
+      cx.notify();
+    });
+  }
+
+  // From this terminal (local addition): Markdown the focused terminal is talking
+  // about (clipboard, paths on screen, its Claude scratchpad), from recent.sh.
+  findRecent(terminal, cx) {
+    if (this.on) return;
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", [`${appHome()}/mods/markdown-panel/recent.sh`, terminal ?? ""]).catch(() => null);
+      this.recent = (r?.stdout ?? "").split("\n").filter((p) => p.startsWith("/"));
       cx.notify();
     });
   }
@@ -156,13 +169,18 @@ export default class MarkdownPanel extends View {
   }
 
   listView(t) {
-    const files = this.files;
-    if (files === null) return div().p(16).text_size(12.5).text_color(t.dim).child("Looking for Markdown…");
-    if (!files.length) return div().p(16).text_size(12.5).text_color(t.dim).child("No Markdown files in this folder. Cmd-click a .md path in a terminal to read it here.");
+    const files = this.files ?? [], recent = this.recent;
+    const row = (id, name, sub, open) => h_flex().id(id).flex_none().h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
+      .hover((s) => s.bg(t.hover)).on_click((_e, cx) => open(cx))
+      .child(div().flex_none().truncate().child(name))
+      .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(sub));
+    const heading = (text) => div().px(10).pt(8).pb(2).text_size(11).text_color(t.dim).child(text);
+    const empty = this.files === null ? "Looking for Markdown…" : "No Markdown files in this folder.";
     return div().id("md-files").flex_1().min_h(0).overflow_y_scrollbar().p(6)
-      .children(files.map((f, i) => h_flex().id(`md-file-${i}`).flex_none().h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
-        .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(`${this.folder}/${f}`, cx, this.on))
-        .child(div().flex_none().truncate().child(nameOf(f)))
-        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(f.includes("/") ? folderOf(f) : ""))));
+      .when(recent.length > 0, (el) => el.child(heading("From this terminal"))
+        .children(recent.map((p, i) => row(`md-recent-${i}`, nameOf(p), tildePath(folderOf(p), null), (cx) => this.open(p, cx)))))
+      .when(recent.length > 0, (el) => el.child(heading("In this folder")))
+      .when(!files.length, (el) => el.child(div().px(10).py(6).text_size(12.5).text_color(t.dim).child(empty)))
+      .children(files.map((f, i) => row(`md-file-${i}`, nameOf(f), f.includes("/") ? folderOf(f) : "", (cx) => this.open(`${this.folder}/${f}`, cx, this.on))));
   }
 }
