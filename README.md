@@ -37,9 +37,11 @@ Re-run it after `git pull`; it is safe to run twice. Needs `python3`.
 
 ## Notes
 
-- `markdown-panel/` is the
-  [herdr-kanso](https://github.com/jlopezlira/herdr-kanso) markdown panel by
-  jlopezlira (Apache-2.0), without its macOS file handler, plus a Done
-  button, an Escape binding and the "From this terminal" list (`recent.sh`) (look for "local addition").
+- `mods/md-review/` is the markdown panel from
+  [herdr-kanso](https://github.com/jlopezlira/herdr-kanso) by jlopezlira
+  (Apache-2.0), renamed so both can be installed, without its macOS file
+  handler. The added parts are marked "local addition" in `main.js`: the
+  Done button, the Escape binding and the "From this terminal" list
+  (`recent.sh`). `RECIPE.md` describes the whole mod for herdr.dev/mods.
 - Closing the panel with × is not Done: the agent keeps waiting.
 - Files on SSH machines open read-only and have no Done button.

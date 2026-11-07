@@ -1,5 +1,5 @@
 #!/bin/sh
-# Open a Markdown file in herdr's markdown-panel window for review.
+# Open a Markdown file in herdr's md-review panel for review.
 # Waits until "Done" is clicked in the panel, then prints the reviewer's
 # changes as a diff (empty: no changes). --no-wait: open and return.
 # --rule: print the agent rule, only inside herdr (for a SessionStart hook).
@@ -14,14 +14,14 @@ wait=1; [ "$1" = --no-wait ] && { wait=; shift; }
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 p=$(realpath "$1")
 done_dir=$home/data/review-done
-mkdir -p "$home/data/kanso-open" "$done_dir"
+mkdir -p "$home/data/md-review-open" "$done_dir"
 # A Done clicked while nobody waited for this file must not end this review.
 for f in "$done_dir"/*.path; do [ -f "$f" ] && [ "$(cat "$f")" = "$p" ] && rm -f "$f"; done
 snap=$(mktemp); cp "$p" "$snap"
-printf '%s' "$p" > "$home/data/kanso-open/$(date +%s)-$$.path"
+printf '%s' "$p" > "$home/data/md-review-open/$(date +%s)-$$.path"
 case "$(herdr-app status 2>/dev/null)" in
-  *'"markdown-panel"'*) ;;
-  *) herdr-app do mod.open '{"name":"markdown-panel"}' >/dev/null ;;
+  *'"md-review"'*) ;;
+  *) herdr-app do mod.open '{"name":"md-review"}' >/dev/null ;;
 esac
 [ -n "$wait" ] || { rm -f "$snap"; exit 0; }
 # ponytail: 1 s poll; inotifywait if latency ever matters

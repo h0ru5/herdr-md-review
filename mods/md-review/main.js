@@ -1,12 +1,13 @@
 // Markdown panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; watchOpens picks them up.
+// Modified for md-review (https://github.com/h0ru5/herdr-md-review): see "local addition".
+// md-review (bin/md-review) leaves .md paths to open in data/md-review-open; watchOpens picks them up.
 // doc.js and blocks.js are synced copies of kanso-panel's; edit those.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
 
-const ICONS = "mods/markdown-panel/icons";
+const ICONS = "mods/md-review/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
@@ -40,7 +41,7 @@ export default class MarkdownPanel extends View {
     this.handle = cx.focus_handle();
     // Escape (local addition): leaves the block being edited, else closes the panel.
     // A binding, not on_key_down, because a focused Textarea takes Escape first.
-    cx.bind_keys(["MarkdownPanel", "MarkdownPanel > Input"].map((context) => ({ keystroke: "escape", action: "markdown_panel_escape", context })));
+    cx.bind_keys(["MdReview", "MdReview > Input"].map((context) => ({ keystroke: "escape", action: "md_review_escape", context })));
     this.recent = [];
     this.watchOpens(cx);
     this.list(cx);
@@ -67,14 +68,14 @@ export default class MarkdownPanel extends View {
   findRecent(terminal, cx) {
     if (this.on) return;
     cx.spawn(async (cx) => {
-      const r = await exec("sh", [`${appHome()}/mods/markdown-panel/recent.sh`, terminal ?? ""]).catch(() => null);
+      const r = await exec("sh", [`${appHome()}/mods/md-review/recent.sh`, terminal ?? ""]).catch(() => null);
       this.recent = (r?.stdout ?? "").split("\n").filter((p) => p.startsWith("/"));
       cx.notify();
     });
   }
 
   watchOpens(cx) {
-    const dir = `${appHome()}/data/kanso-open`;
+    const dir = `${appHome()}/data/md-review-open`;
     cx.spawn(async (cx) => {
       try {
         await exec("mkdir", ["-p", dir]);
@@ -149,8 +150,8 @@ export default class MarkdownPanel extends View {
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx))
       .child(svg(`${ICONS}/${icon}.svg`).size(14));
-    return v_flex().id("markdown-panel").key_context("MarkdownPanel").track_focus(this.handle)
-      .on_action("markdown_panel_escape", (_e, cx) => {
+    return v_flex().id("md-review").key_context("MdReview").track_focus(this.handle)
+      .on_action("md_review_escape", (_e, cx) => {
         if (doc && doc.active !== null) { doc.close(); cx.notify(); } else this.close(cx);
       }).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .on_key_down((e, cx) => doc?.key(e, cx))

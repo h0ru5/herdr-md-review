@@ -1,16 +1,18 @@
 #!/bin/sh
-# Installs md-review: the herdr markdown-panel mod (with a Done button),
-# the md-review command, the alt-m key, and the agent rule for Claude Code
-# and opencode. Re-run after `git pull` to update. Safe to re-run.
+# Installs md-review: the herdr md-review mod, the md-review command, the
+# alt-m key, and the agent rule for Claude Code and opencode.
+# Re-run after `git pull` to update. Safe to re-run.
 set -e
 repo=$(cd "$(dirname "$0")" && pwd)
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 bin=${BIN_DIR:-$HOME/.local/bin}
 
 mkdir -p "$home/mods" "$bin"
-mod=$home/mods/markdown-panel
+# Early versions installed as mods/markdown-panel (kanso's name); remove only ours.
+[ -f "$home/mods/markdown-panel/recent.sh" ] && rm -rf "$home/mods/markdown-panel"
+mod=$home/mods/md-review
 # A copy, not a link: herdr loads no icons from outside its home.
-rm -rf "$mod" && cp -R "$repo/markdown-panel" "$mod"
+rm -rf "$mod" && cp -R "$repo/mods/md-review" "$mod"
 ln -sf "$repo/bin/md-review" "$bin/md-review"
 
 # alt-m opens the panel, unless alt-m is already taken.
@@ -19,10 +21,11 @@ import json, os, sys
 p = sys.argv[1]
 k = json.load(open(p)) if os.path.exists(p) else {}
 g = k.setdefault("global", {})
-if g.get("alt-m", "mod.open:markdown-panel") != "mod.open:markdown-panel":
-    print(f"alt-m is bound to {g['alt-m']}; not changed. Bind mod.open:markdown-panel in {p}.")
+ours = ("mod.open:md-review", "mod.open:markdown-panel")
+if g.get("alt-m", ours[0]) not in ours:
+    print(f"alt-m is bound to {g['alt-m']}; not changed. Bind mod.open:md-review in {p}.")
 else:
-    g["alt-m"] = "mod.open:markdown-panel"
+    g["alt-m"] = "mod.open:md-review"
     with open(p, "w") as f: json.dump(k, f, indent=2); f.write("\n")
 EOF
 
